@@ -7,7 +7,9 @@ def test_travel_plan():
         'answers': [
             'Cairo',
             '3 days',
-            'Historical sites and cultural experiences'
+            'Historical sites',
+            'Cultural experiences',
+            'Morning visits preferred'
         ]
     }
     
@@ -20,8 +22,6 @@ def test_travel_plan():
         
         try:
             data = response.json()
-            print("\nResponse data:", data)
-            
             if response.status_code == 200 and data.get('success'):
                 print("\nTravel Plan:")
                 print(data['travel_plan'])

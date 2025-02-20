@@ -23,42 +23,86 @@ genai.configure(api_key=api_key)
 def load_data():
     try:
         # Get the current directory
-        current_dir = os.getcwd()
-        print(f"Current working directory: {current_dir}")
-
-        # Define file paths
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         places_path = os.path.join(current_dir, 'places.xlsx')
         activities_path = os.path.join(current_dir, 'activities.xlsx')
         
-        print(f"Looking for files at:")
-        print(f"Places: {places_path}")
-        print(f"Activities: {activities_path}")
-
-        # Check if files exist
-        if not os.path.exists(places_path):
-            raise FileNotFoundError(f"Places file not found at: {places_path}")
-        if not os.path.exists(activities_path):
-            raise FileNotFoundError(f"Activities file not found at: {activities_path}")
-
+        # Print file paths for debugging
+        print(f"Attempting to load files from: \nPlaces: {places_path}\nActivities: {activities_path}")
+        
         # Load the files
-        print("Loading places file...")
         places_df = pd.read_excel(places_path)
-        print(f"Places file loaded successfully with {len(places_df)} rows")
-
-        print("Loading activities file...")
         activities_df = pd.read_excel(activities_path)
-        print(f"Activities file loaded successfully with {len(activities_df)} rows")
-
+        
+        print(f"Successfully loaded data:\nPlaces: {len(places_df)} records\nActivities: {len(activities_df)} records")
         return places_df, activities_df
-
-    except FileNotFoundError as e:
-        print(f"File not found error: {str(e)}")
-        return None, None
     except Exception as e:
         print(f"Error loading Excel files: {str(e)}")
-        print("Full error traceback:")
         print(traceback.format_exc())
         return None, None
+
+def create_detailed_prompt(places_df, activities_df, answers):
+    # Format places data
+    places_info = "Available Places:\n"
+    for _, row in places_df.iterrows():
+        places_info += f"- {row['Name']}: {row['Description']}\n"
+        places_info += f"  Location: {row['Address']}\n"
+        places_info += f"  Hours: {row['open time']} - {row['close time']}\n"
+        places_info += f"  Entry Fee: {row['Entry Fee']}\n"
+        if pd.notna(row['cultural tip']):
+            places_info += f"  Cultural Tip: {row['cultural tip']}\n"
+        places_info += "\n"
+
+    # Format activities data
+    activities_info = "Available Activities:\n"
+    for _, row in activities_df.iterrows():
+        activities_info += f"- {row['Name']}: {row['Description']}\n"
+        if 'Duration' in activities_df.columns:
+            activities_info += f"  Duration: {row['Duration']}\n"
+        if 'Entry Fee' in activities_df.columns:
+            activities_info += f"  Entry Fee: {row['Entry Fee']}\n"
+        activities_info += "\n"
+
+    return f"""Based on the following places and activities, create a detailed travel plan for {answers[0]} for {answers[1]}.
+
+{places_info}
+
+{activities_info}
+
+Please create a comprehensive travel plan following this format:
+
+## Destination Overview
+Provide a brief overview of {answers[0]} based on the available attractions and activities.
+
+## Daily Itinerary
+For each day, include:
+- Morning activity (with opening times and cultural tips)
+- Afternoon activity (with cultural tips)
+- Evening activity (with closing times and cultural tips)
+Make sure to:
+- Only include places and activities from the provided lists
+- Consider opening and closing times
+- Group nearby locations together
+- Include relevant cultural tips
+- Mention entry fees
+
+## Cultural Tips and Dress Code
+- List important cultural considerations from the data
+- Include dress code requirements
+- Mention timing considerations
+
+## Budget Breakdown
+- List entry fees for each place/activity
+- Provide estimated total cost
+
+## Transportation and Logistics
+- Suggest efficient routes between locations
+- Include practical transportation tips
+- Mention best times to visit each location
+
+Additional preferences: {', '.join(answers[2:] if len(answers) > 2 else [])}
+
+Important: Only recommend places and activities that are explicitly listed in the provided data."""
 
 @app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
@@ -68,7 +112,7 @@ def generate_travel_plan():
         if places_df is None or activities_df is None:
             return jsonify({
                 'success': False,
-                'error': 'Failed to load Excel files. Check server logs for details.'
+                'error': 'Failed to load data from Excel files'
             }), 500
 
         # Get request data
@@ -82,10 +126,16 @@ def generate_travel_plan():
         answers = data['answers']
         print(f"Received answers: {answers}")
 
-        # Create a simple test response first
+        # Create detailed prompt
+        prompt = create_detailed_prompt(places_df, activities_df, answers)
+
+        # Generate response
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content(prompt)
+
         return jsonify({
             'success': True,
-            'travel_plan': f"Test plan for {answers[0]} for {answers[1]}"
+            'travel_plan': response.text
         }), 200
 
     except Exception as e:
@@ -97,16 +147,6 @@ def generate_travel_plan():
         }), 500
 
 if __name__ == '__main__':
-    print("\nStarting server...")
+    print("Starting server...")
     print(f"Current directory: {os.getcwd()}")
-    
-    # Test loading files before starting server
-    print("\nTesting file loading...")
-    places_df, activities_df = load_data()
-    if places_df is not None and activities_df is not None:
-        print("Files loaded successfully!")
-        print(f"Places: {len(places_df)} rows")
-        print(f"Activities: {len(activities_df)} rows")
-        app.run(debug=True)
-    else:
-        print("\nError: Could not load required files. Please check the file paths and names.")
+    app.run(debug=True)
