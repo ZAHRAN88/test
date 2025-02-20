@@ -1,36 +1,53 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import google.generativeai as genai
+from dotenv import load_dotenv
+import pandas as pd
+import os
+import traceback
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)
+
+# Configure Google Generative AI
+api_key = os.getenv('GEMINI_API_KEY')
+if not api_key:
+    raise ValueError("GEMINI_API_KEY not found in .env file")
+genai.configure(api_key=api_key)
+
 def load_data():
     """
-    Load data from both Excel files.
-    Returns two Pandas DataFrames if successful, otherwise None.
+    Load data from the Excel files.
     """
     try:
-        # Get the absolute path of the current directory
-        current_dir = os.getcwd()
-        places_path = os.path.join(current_dir, 'places.xlsx')
-        activities_path = os.path.join(current_dir, 'activities.xlsx')
+        # Get the directory of the current script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # Print file paths for debugging
-        print(f"Attempting to load files from:")
-        print(f"Places: {places_path}")
-        print(f"Activities: {activities_path}")
+        # Define file paths
+        places_path = os.path.join(script_dir, 'data', 'places.xlsx')
+        activities_path = os.path.join(script_dir, 'data', 'activities.xlsx')
         
-        # Check if files exist
-        if not os.path.exists(places_path):
-            print(f"Error: Places file not found at {places_path}")
-            return None, None
-        if not os.path.exists(activities_path):
-            print(f"Error: Activities file not found at {activities_path}")
-            return None, None
-            
+        print(f"Loading data from:")
+        print(f"Places path: {places_path}")
+        print(f"Activities path: {activities_path}")
+
         # Load the files
-        places_df = pd.read_excel(places_path)
-        activities_df = pd.read_excel(activities_path)
-        
-        print(f"Successfully loaded {len(places_df)} places and {len(activities_df)} activities")
-        return places_df, activities_df
+        try:
+            places_df = pd.read_excel(places_path)
+            activities_df = pd.read_excel(activities_path)
+            print("Successfully loaded both files")
+            return places_df, activities_df
+        except Exception as e:
+            print(f"Error reading Excel files: {str(e)}")
+            return None, None
+
     except Exception as e:
-        print(f"Error loading Excel files: {str(e)}")
-        print(traceback.format_exc())
+        print(f"Error in load_data: {str(e)}")
+        traceback.print_exc()
         return None, None
 
 def create_prompt(answers, places_df, activities_df):
@@ -44,6 +61,10 @@ def create_prompt(answers, places_df, activities_df):
     season = answers[4]
     budget = answers[5]
     
+    # Create the combined data string
+    places_data = places_df.to_string(index=False) if places_df is not None else "No places data available"
+    activities_data = activities_df.to_string(index=False) if activities_df is not None else "No activities data available"
+    
     prompt = f"""Create a {duration}-day travel itinerary based on the following preferences:
 
 Selected Experiences: {experiences}
@@ -53,10 +74,10 @@ Season: {season}
 Budget Range: {budget}
 
 Available Places:
-{places_df.to_string(index=False)}
+{places_data}
 
 Available Activities:
-{activities_df.to_string(index=False)}
+{activities_data}
 
 Please provide a day-by-day itinerary that:
 1. Only includes places and activities from the provided lists
@@ -76,10 +97,10 @@ def generate_travel_plan():
     try:
         # Load data
         places_df, activities_df = load_data()
-        if places_df is None or activities_df is None:
+        if places_df is None and activities_df is None:
             return jsonify({
                 'success': False,
-                'error': 'Failed to load data from Excel files'
+                'error': 'Failed to load data files'
             }), 500
         
         # Get request data
@@ -119,3 +140,8 @@ def generate_travel_plan():
             'success': False,
             'error': str(e)
         }), 500
+
+if __name__ == '__main__':
+    print("Starting server...")
+    print(f"Current directory: {os.getcwd()}")
+    app.run(debug=True)
