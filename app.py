@@ -43,6 +43,43 @@ def load_data():
         print(f"Error loading Excel files: {str(e)}")
         print(traceback.format_exc())
         return None, None
+
+def create_travel_prompt(answers, places_df, activities_df):
+    """
+    Create a structured prompt for the travel itinerary based on user answers and available data.
+    """
+    experiences = answers[0]
+    duration = answers[1]
+    places = answers[2]
+    activities = answers[3]
+    season = answers[4]
+    budget = answers[5]
+
+    prompt = f"""Create a {duration}-day travel itinerary based on the following preferences:
+
+Selected Experiences: {experiences}
+Places of Interest: {places}
+Preferred Activities: {activities}
+Season: {season}
+Budget Range: {budget}
+
+Available Places:
+{places_df.to_string(index=False)}
+
+Available Activities:
+{activities_df.to_string(index=False)}
+
+Please provide a day-by-day itinerary that:
+1. Only includes places and activities from the provided lists
+2. Fits within the {duration}-day duration
+3. Stays within the budget of {budget}
+4. Is appropriate for {season} season
+5. Includes estimated costs for each activity
+
+Format as a daily schedule with morning, afternoon, and evening activities."""
+
+    return prompt
+
 @app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
     try:
@@ -65,36 +102,8 @@ def generate_travel_plan():
         answers = data['answers']
         print(f"Received answers: {answers}")  # Debug print
 
-        # Create prompt
-        experiences = answers[0]
-        duration = answers[1]
-        places = answers[2]
-        activities = answers[3]
-        season = answers[4]
-        budget = answers[5]
-
-        prompt = f"""Create a {duration}-day travel itinerary based on the following preferences:
-
-Selected Experiences: {experiences}
-Places of Interest: {places}
-Preferred Activities: {activities}
-Season: {season}
-Budget Range: {budget}
-
-Available Places:
-{places_df.to_string(index=False)}
-
-Available Activities:
-{activities_df.to_string(index=False)}
-
-Please provide a day-by-day itinerary that:
-1. Only includes places and activities from the provided lists
-2. Fits within the {duration}-day duration
-3. Stays within the budget of {budget}
-4. Is appropriate for {season} season
-5. Includes estimated costs for each activity
-
-Format as a daily schedule with morning, afternoon, and evening activities."""
+        # Create prompt using the separate function
+        prompt = create_travel_prompt(answers, places_df, activities_df)
 
         # Generate response
         model = genai.GenerativeModel('gemini-pro')
