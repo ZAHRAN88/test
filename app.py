@@ -21,32 +21,39 @@ genai.configure(api_key=api_key)
 
 def load_data():
     """
-    Load data from the Excel file.
-    Returns a Pandas DataFrame if successful, otherwise None.
+    Load data from the Excel files.
+    Returns a tuple of Pandas DataFrames if successful, otherwise None.
     """
     try:
         # Get the absolute path of the current directory
         current_dir = os.getcwd()
-        file_path = os.path.join(current_dir, 'places.xlsx')  # Adjust the path if necessary
         
-        # Print file path for debugging
-        print(f"Attempting to load file from: {file_path}")
-        
-        # Check if file exists
-        if not os.path.exists(file_path):
-            print(f"Error: File not found at {file_path}")
+        places_file_path = os.path.join(current_dir, 'places.xlsx')
+        activities_file_path = os.path.join(current_dir, 'activities.xlsx')
+
+        # Print file paths for debugging
+        print(f"Attempting to load places file from: {places_file_path}")
+        print(f"Attempting to load activities file from: {activities_file_path}")
+
+        # Check if files exist
+        if not os.path.exists(places_file_path) or not os.path.exists(activities_file_path):
+            print(f"Error: One or more files not found.")
             return None
-            
-        # Load the file
-        df = pd.read_excel(file_path)
-        print(f"Successfully loaded {len(df)} records from Excel file")
-        return df
+
+        # Load the files
+        df_places = pd.read_excel(places_file_path)
+        df_activities = pd.read_excel(activities_file_path)
+
+        print(f"Successfully loaded {len(df_places)} records from places Excel file")
+        print(f"Successfully loaded {len(df_activities)} records from activities Excel file")
+
+        return df_places, df_activities
     except Exception as e:
-        print(f"Error loading Excel file: {str(e)}")
+        print(f"Error loading Excel files: {str(e)}")
         print(traceback.format_exc())
         return None
 
-def create_prompt(answers, df):
+def create_prompt(answers, df_places, df_activities):
     """
     Create a structured prompt based on the MCQ answers and available data.
     """
@@ -56,17 +63,22 @@ def create_prompt(answers, df):
     activities = answers[3]
     season = answers[4]
     budget = answers[5]
-    
+
     prompt = f"""Create a {duration}-day travel itinerary based on the following preferences:
 Selected Experiences: {experiences}
 Places of Interest: {places}
 Preferred Activities: {activities}
 Season: {season}
 Budget Range: {budget}
-Available Places and Activities:
-{df.to_string(index=False)}
+
+Available Places:
+{df_places.to_string(index=False)}
+
+Available Activities:
+{df_activities.to_string(index=False)}
+
 Please provide a day-by-day itinerary that:
-1. Only includes places and activities from the provided list
+1. Only includes places and activities from the provided lists
 2. Fits within the {duration}-day duration
 3. Stays within the budget of {budget}
 4. Is appropriate for {season} season
@@ -81,13 +93,15 @@ def generate_travel_plan():
     """
     try:
         # Load data
-        df = load_data()
-        if df is None:
+        data = load_data()
+        if data is None:
             return jsonify({
                 'success': False,
-                'error': 'Failed to load data from Excel file'
+                'error': 'Failed to load data from Excel files'
             }), 500
         
+        df_places, df_activities = data
+
         # Get request data
         data = request.get_json()
         if not data or 'answers' not in data:
@@ -107,7 +121,7 @@ def generate_travel_plan():
             }), 400
         
         # Create prompt
-        prompt = create_prompt(answers, df)
+        prompt = create_prompt(answers, df_places, df_activities)
         
         # Generate response using Gemini API
         model = genai.GenerativeModel('gemini-pro')
