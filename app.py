@@ -22,70 +22,43 @@ genai.configure(api_key=api_key)
 
 def load_data():
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Load both Excel files
+        # Get the current directory
+        current_dir = os.getcwd()
+        print(f"Current working directory: {current_dir}")
+
+        # Define file paths
         places_path = os.path.join(current_dir, 'places.xlsx')
         activities_path = os.path.join(current_dir, 'activities.xlsx')
         
-        print(f"Attempting to load files from:\nPlaces: {places_path}\nActivities: {activities_path}")
-        
+        print(f"Looking for files at:")
+        print(f"Places: {places_path}")
+        print(f"Activities: {activities_path}")
+
         # Check if files exist
         if not os.path.exists(places_path):
-            print(f"Error: Places file not found at {places_path}")
-            return None, None
+            raise FileNotFoundError(f"Places file not found at: {places_path}")
         if not os.path.exists(activities_path):
-            print(f"Error: Activities file not found at {activities_path}")
-            return None, None
-            
+            raise FileNotFoundError(f"Activities file not found at: {activities_path}")
+
         # Load the files
+        print("Loading places file...")
         places_df = pd.read_excel(places_path)
+        print(f"Places file loaded successfully with {len(places_df)} rows")
+
+        print("Loading activities file...")
         activities_df = pd.read_excel(activities_path)
-        
-        print(f"Successfully loaded:\n{len(places_df)} places\n{len(activities_df)} activities")
+        print(f"Activities file loaded successfully with {len(activities_df)} rows")
+
         return places_df, activities_df
+
+    except FileNotFoundError as e:
+        print(f"File not found error: {str(e)}")
+        return None, None
     except Exception as e:
         print(f"Error loading Excel files: {str(e)}")
+        print("Full error traceback:")
         print(traceback.format_exc())
         return None, None
-
-def format_places_data(df):
-    formatted_data = "\nAVAILABLE PLACES:\n"
-    
-    # Group by Category
-    categories = df['Category'].unique()
-    for category in categories:
-        formatted_data += f"\n{category.upper()}:\n"
-        category_places = df[df['Category'] == category]
-        
-        for _, row in category_places.iterrows():
-            formatted_data += f"- {row['Name']}\n"
-            formatted_data += f"  Description: {row['Description']}\n"
-            formatted_data += f"  Location: {row['Address']}\n"
-            formatted_data += f"  Hours: {row['open time']} - {row['close time']}\n"
-            formatted_data += f"  Entry Fee: {row['Entry Fee']}\n"
-            if pd.notna(row['cultural tip']):
-                formatted_data += f"  Cultural Tip: {row['cultural tip']}\n"
-            formatted_data += "\n"
-    
-    return formatted_data
-
-def format_activities_data(df):
-    formatted_data = "\nAVAILABLE ACTIVITIES:\n"
-    
-    # Group by Category if it exists in your activities file
-    # Modify this according to your activities Excel file structure
-    for _, row in df.iterrows():
-        formatted_data += f"- {row['Name']}\n"
-        if 'Description' in df.columns:
-            formatted_data += f"  Description: {row['Description']}\n"
-        if 'Duration' in df.columns:
-            formatted_data += f"  Duration: {row['Duration']}\n"
-        if 'Entry Fee' in df.columns:
-            formatted_data += f"  Entry Fee: {row['Entry Fee']}\n"
-        formatted_data += "\n"
-    
-    return formatted_data
 
 @app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
@@ -95,7 +68,7 @@ def generate_travel_plan():
         if places_df is None or activities_df is None:
             return jsonify({
                 'success': False,
-                'error': 'Failed to load data from Excel files'
+                'error': 'Failed to load Excel files. Check server logs for details.'
             }), 500
 
         # Get request data
@@ -109,62 +82,10 @@ def generate_travel_plan():
         answers = data['answers']
         print(f"Received answers: {answers}")
 
-        # Format both datasets
-        places_data = format_places_data(places_df)
-        activities_data = format_activities_data(activities_df)
-
-        # Create prompt
-        prompt = f"""Create a detailed travel plan using ONLY the places and activities provided in these lists.
-        Do not include any places or activities that are not in these lists.
-        
-        {places_data}
-        
-        {activities_data}
-        
-        Please create the plan following this EXACT format:
-        
-        ## Destination Overview
-        Provide a 2-3 sentence overview focusing on the types of attractions available.
-        
-        ## Daily Itinerary
-        Create a daily plan that:
-        - Respects the opening and closing times of each place
-        - Groups nearby locations together to minimize travel time
-        - Includes cultural tips for each place
-        - Mentions entry fees
-        
-        Day 1: [Title]
-        - Morning: [Place/Activity] (include opening time and cultural tip)
-        - Afternoon: [Place/Activity] (include cultural tip)
-        - Evening: [Place/Activity] (include closing time and cultural tip)
-        
-        [Continue for requested number of days...]
-        
-        ## Essential Tips
-        - List relevant cultural tips from the data
-        - Include dress code requirements
-        - Mention timing considerations
-        
-        ## Budget Breakdown
-        - List all entry fees from the selected places
-        - Total cost for attractions
-        
-        ## Practical Information
-        - Opening and closing times for each place
-        - Location details
-        - Cultural considerations
-        
-        Based on these preferences: {", ".join(answers)}
-        
-        Important: Only include places and activities that are explicitly listed in the provided data."""
-
-        # Generate response
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
-        
+        # Create a simple test response first
         return jsonify({
             'success': True,
-            'travel_plan': response.text
+            'travel_plan': f"Test plan for {answers[0]} for {answers[1]}"
         }), 200
 
     except Exception as e:
@@ -176,6 +97,16 @@ def generate_travel_plan():
         }), 500
 
 if __name__ == '__main__':
-    print("Starting server...")
+    print("\nStarting server...")
     print(f"Current directory: {os.getcwd()}")
-    app.run(debug=True)
+    
+    # Test loading files before starting server
+    print("\nTesting file loading...")
+    places_df, activities_df = load_data()
+    if places_df is not None and activities_df is not None:
+        print("Files loaded successfully!")
+        print(f"Places: {len(places_df)} rows")
+        print(f"Activities: {len(activities_df)} rows")
+        app.run(debug=True)
+    else:
+        print("\nError: Could not load required files. Please check the file paths and names.")
