@@ -1,17 +1,21 @@
 import requests
 
-def get_travel_plan(destination, duration, preferences):
+def get_travel_plan():
     url = 'http://127.0.0.1:5000/api/generate-travel-plan'
     
-    answers = [destination, duration, preferences]
-    
-    payload = {
-        'answers': answers
+    # Example preferences
+    preferences = {
+        'answers': [
+            'Historical sites and museums',
+            '3 days',
+            'Prefer morning visits',
+            'Interested in cultural experiences'
+        ]
     }
     
     try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response = requests.post(url, json=preferences)
+        response.raise_for_status()
         
         data = response.json()
         
@@ -24,13 +28,5 @@ def get_travel_plan(destination, duration, preferences):
     except requests.exceptions.RequestException as e:
         print("Error making request:", e)
 
-# Example usage
 if __name__ == "__main__":
-    print("Travel Plan Generator")
-    print("--------------------")
-    
-    destination = input("Enter destination: ")
-    duration = input("Enter duration (e.g., 3 days, 1 week): ")
-    preferences = input("Enter preferences (e.g., cultural, adventure, relaxation): ")
-    
-    get_travel_plan(destination, duration, preferences)
+    get_travel_plan()
