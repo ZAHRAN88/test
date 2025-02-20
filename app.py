@@ -21,6 +21,9 @@ if not api_key:
 genai.configure(api_key=api_key)
 
 def load_data():
+    """
+    Load data from Excel files
+    """
     try:
         current_dir = os.getcwd()
         places_path = os.path.join(current_dir, 'places.xlsx')
@@ -42,14 +45,16 @@ def load_data():
         return None, None
 
 def format_list_items(items):
-    """Helper function to format list items for the prompt"""
+    """
+    Format list items for the prompt
+    """
     if isinstance(items, list):
         return ', '.join(items)
     return str(items)
 
 def create_travel_prompt(answers, places_df, activities_df):
     """
-    Create a structured prompt handling multiple selections for each preference.
+    Create structured prompt for travel itinerary
     """
     experiences = format_list_items(answers[0])
     duration = answers[1]
@@ -58,56 +63,60 @@ def create_travel_prompt(answers, places_df, activities_df):
     season = answers[4]
     budget = answers[5]
 
-    prompt = f"""Create a detailed {duration}-day travel itinerary based on these multiple preferences:
+    prompt = f"""Create a {duration}-day travel itinerary based on these preferences:
 
-Selected Experiences: {experiences}
-Places of Interest: {places}
-Preferred Activities: {activities}
-Season: {season}
-Budget Range: {budget}
+User Preferences:
+- Experiences: {experiences}
+- Places: {places}
+- Activities: {activities}
+- Season: {season}
+- Budget: {budget}
 
-Available Places:
+Available Places Data:
 {places_df.to_string(index=False)}
 
-Available Activities:
+Available Activities Data:
 {activities_df.to_string(index=False)}
 
-Requirements:
-1. Only use places and activities from the provided lists
-2. Create a {duration}-day schedule
-3. Stay within {budget} budget
-4. Plan should be suitable for {season}
-5. Include cost estimates for each activity
-6. Try to incorporate as many selected preferences as possible
-7. Ensure activities match with the selected places
-
-Format the response as JSON:
+Generate a response in exactly this JSON format:
 {{
-    "itinerary": {{
-        "total_days": {duration},
-        "total_budget": "{budget}",
-        "days": [
-            {{
-                "day": 1,
-                "morning": {{
-                    "place": "place_name",
-                    "activity": "activity_name",
-                    "cost": "amount"
-                }},
-                "afternoon": {{
-                    "place": "place_name",
-                    "activity": "activity_name",
-                    "cost": "amount"
-                }},
-                "evening": {{
-                    "place": "place_name",
-                    "activity": "activity_name",
-                    "cost": "amount"
+    "success": true,
+    "travel_plan": {{
+        "itinerary": {{
+            "days": [
+                {{
+                    "day1": {{
+                        "place": {{
+                            "name": "place_name",
+                            "desc": "place_description",
+                            "entryCost": "cost_in_EGP",
+                            "duration": "duration_in_hours"
+                        }},
+                        "activity": {{
+                            "name": "activity_name",
+                            "desc": "activity_description",
+                            "entryCost": "cost_in_EGP",
+                            "duration": "duration_in_hours"
+                        }}
+                    }}
                 }}
-            }}
-        ]
+            ],
+            "total_budget": "{budget}",
+            "total_days": {duration}
+        }}
     }}
-}}"""
+}}
+
+Requirements:
+1. Use only places and activities from the provided data
+2. Each day must have exactly one place and one matching activity
+3. Include accurate descriptions, costs, and durations
+4. Stay within the total budget of {budget}
+5. All activities must be suitable for {season}
+6. Follow the exact JSON format shown above
+7. All costs must be in EGP
+8. Duration must be in hours
+9. Ensure place and activity combinations make logical sense"""
 
     return prompt
 
@@ -116,24 +125,42 @@ def parse_response(response_text):
     Parse and validate the AI response
     """
     try:
-        # Clean up the response if needed
+        # Clean up the response
         cleaned_response = response_text.strip()
         
-        # Find the JSON part in the response
+        # Extract JSON from response
         start_idx = cleaned_response.find('{')
         end_idx = cleaned_response.rfind('}') + 1
+        
         if start_idx >= 0 and end_idx > start_idx:
             json_str = cleaned_response[start_idx:end_idx]
-            return json.loads(json_str)
-        
-        return cleaned_response
+            parsed_json = json.loads(json_str)
+            
+            # Validate JSON structure
+            if not all(key in parsed_json for key in ['success', 'travel_plan']):
+                raise ValueError("Invalid response format - missing required keys")
+            
+            # Validate itinerary structure
+            itinerary = parsed_json.get('travel_plan', {}).get('itinerary', {})
+            if not all(key in itinerary for key in ['days', 'total_budget', 'total_days']):
+                raise ValueError("Invalid itinerary format - missing required fields")
+            
+            return parsed_json
+            
+        raise ValueError("No valid JSON found in response")
         
     except Exception as e:
         print(f"Error parsing response: {str(e)}")
-        return response_text
+        return {
+            "success": False,
+            "error": f"Failed to parse response: {str(e)}"
+        }
 
 @app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
+    """
+    Generate travel plan based on user preferences
+    """
     try:
         # Load data
         places_df, activities_df = load_data()
@@ -158,24 +185,33 @@ def generate_travel_plan():
         if len(answers) != 6:
             return jsonify({
                 'success': False,
-                'error': 'Invalid number of answers'
+                'error': 'Invalid number of answers. Expected 6 items.'
             }), 400
 
-        # Create prompt
-        prompt = create_travel_prompt(answers, places_df, activities_df)
-
         try:
-            # Generate response
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            response = model.generate_content(prompt)
+            # Create prompt and generate response
+            prompt = create_travel_prompt(answers, places_df, activities_df)
+            model = genai.GenerativeModel('gemini-1.0-pro')
             
-            # Parse and format the response
-            formatted_response = parse_response(response.text)
+            generation_config = {
+                'temperature': 0.7,
+                'top_p': 0.8,
+                'top_k': 40,
+                'max_output_tokens': 2048,
+            }
 
-            return jsonify({
-                'success': True,
-                'travel_plan': formatted_response
-            }), 200
+            response = model.generate_content(
+                prompt,
+                generation_config=generation_config
+            )
+            
+            # Parse and validate response
+            parsed_response = parse_response(response.text)
+            
+            if not parsed_response.get('success'):
+                return jsonify(parsed_response), 400
+
+            return jsonify(parsed_response), 200
 
         except Exception as e:
             error_message = str(e)
@@ -197,6 +233,16 @@ def generate_travel_plan():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """
+    Health check endpoint
+    """
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Service is running'
+    }), 200
 
 if __name__ == '__main__':
     print("Starting server...")
