@@ -12,17 +12,31 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Configure Google Generative AI
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+api_key = os.getenv('GEMINI_API_KEY')
+if not api_key:
+    raise ValueError("No API key found. Make sure GEMINI_API_KEY is set in .env file")
+
+genai.configure(api_key=api_key)
+
+# Add a root route
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"message": "Welcome to the Travel Plan API"})
 
 @app.route('/test', methods=['GET'])
 def test():
     return jsonify({"message": "API is working!"})
 
-@app.route('/api/generate-travel-plan', methods=['POST'])
+@app.route('/api/generate-travel-plan', methods=['POST', 'OPTIONS'])
 def generate_travel_plan():
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        return '', 200
+
     try:
         # Get data from request
         data = request.get_json()
+        print("Received data:", data)  # Debug print
         
         if not data or 'answers' not in data:
             return jsonify({
@@ -30,6 +44,7 @@ def generate_travel_plan():
             }), 400
         
         answers = data['answers']
+        print("Answers:", answers)  # Debug print
         
         if not isinstance(answers, list):
             return jsonify({
@@ -86,6 +101,8 @@ def generate_travel_plan():
         
         Based on these details: {", ".join(answers)}"""
 
+        print("Generated prompt:", prompt)  # Debug print
+
         # Generate response
         model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
@@ -96,11 +113,25 @@ def generate_travel_plan():
         }), 200
 
     except Exception as e:
-        print(f"Error: {str(e)}")  # This will show in your terminal
+        print(f"Error occurred: {str(e)}")  # Debug print
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
+# Add CORS headers
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    print("Server starting...")
+    print("Available routes:")
+    print("  - GET  /")
+    print("  - GET  /test")
+    print("  - POST /api/generate-travel-plan")
+    print("\nServer will run on: http://localhost:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)
