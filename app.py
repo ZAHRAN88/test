@@ -12,31 +12,30 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Configure Google Generative AI
-api_key = os.getenv('GEMINI_API_KEY')
-if not api_key:
-    raise ValueError("No API key found. Make sure GEMINI_API_KEY is set in .env file")
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
-genai.configure(api_key=api_key)
-
-# Add a root route
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({"message": "Welcome to the Travel Plan API"})
+# Add root route (this was missing before)
+@app.route('/')
+def index():
+    return jsonify({
+        "status": "online",
+        "message": "Welcome to Travel Plan API",
+        "endpoints": {
+            "/": "This welcome message",
+            "/test": "Test endpoint",
+            "/api/generate-travel-plan": "Generate travel plan (POST)"
+        }
+    })
 
 @app.route('/test', methods=['GET'])
 def test():
     return jsonify({"message": "API is working!"})
 
-@app.route('/api/generate-travel-plan', methods=['POST', 'OPTIONS'])
+@app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
-    # Handle preflight requests
-    if request.method == 'OPTIONS':
-        return '', 200
-
     try:
         # Get data from request
         data = request.get_json()
-        print("Received data:", data)  # Debug print
         
         if not data or 'answers' not in data:
             return jsonify({
@@ -44,7 +43,6 @@ def generate_travel_plan():
             }), 400
         
         answers = data['answers']
-        print("Answers:", answers)  # Debug print
         
         if not isinstance(answers, list):
             return jsonify({
@@ -101,8 +99,6 @@ def generate_travel_plan():
         
         Based on these details: {", ".join(answers)}"""
 
-        print("Generated prompt:", prompt)  # Debug print
-
         # Generate response
         model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
@@ -113,7 +109,7 @@ def generate_travel_plan():
         }), 200
 
     except Exception as e:
-        print(f"Error occurred: {str(e)}")  # Debug print
+        print(f"Error: {str(e)}")  # This will show in your terminal
         return jsonify({
             'success': False,
             'error': str(e)
@@ -128,10 +124,9 @@ def after_request(response):
     return response
 
 if __name__ == '__main__':
-    print("Server starting...")
-    print("Available routes:")
-    print("  - GET  /")
-    print("  - GET  /test")
-    print("  - POST /api/generate-travel-plan")
-    print("\nServer will run on: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("Server starting at http://127.0.0.1:5000")
+    print("Available endpoints:")
+    print("  GET  / - Welcome message")
+    print("  GET  /test - Test endpoint")
+    print("  POST /api/generate-travel-plan - Generate travel plan")
+    app.run(debug=True)
