@@ -24,11 +24,13 @@ def load_data():
         # Get the absolute path of the current directory
         current_dir = os.getcwd()
         
-        # Load places.xlsx
+        # Load files directly from the root directory
         places_path = os.path.join(current_dir, 'places.xlsx')
         activities_path = os.path.join(current_dir, 'activities.xlsx')
         
         print(f"Loading files from: {current_dir}")
+        print(f"Places path: {places_path}")
+        print(f"Activities path: {activities_path}")
         
         # Load both files
         places_df = pd.read_excel(places_path)
@@ -41,7 +43,6 @@ def load_data():
         print(f"Error loading Excel files: {str(e)}")
         print(traceback.format_exc())
         return None, None
-
 @app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
     try:
