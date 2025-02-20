@@ -7,7 +7,7 @@ def test_travel_plan():
         'answers': [
             'Cairo',
             '3 days',
-            'Historical sites'
+            'Historical sites and cultural experiences'
         ]
     }
     
