@@ -4,6 +4,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import pandas as pd
 import os
+import traceback  # Add this for better error tracking
 
 # Load environment variables
 load_dotenv()
@@ -13,119 +14,79 @@ app = Flask(__name__)
 CORS(app)
 
 # Configure Google Generative AI
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+api_key = os.getenv('GEMINI_API_KEY')
+if not api_key:
+    raise ValueError("GEMINI_API_KEY not found in .env file")
 
-# Load Excel files
+genai.configure(api_key=api_key)
+
 def load_data():
     try:
-        # Adjust the column names based on your Excel files
-        places_df = pd.read_excel('places.xlsx', engine='openpyxl')
-        activities_df = pd.read_excel('activities.xlsx', engine='openpyxl')
-        return places_df, activities_df
-    except Exception as e:
-        print(f"Error loading Excel files: {e}")
-        return None, None
-
-def format_data_for_prompt(df):
-    formatted_data = "\nAvailable Places and Activities:\n"
-    
-    # Group by Category
-    for category in df['Category'].unique():
-        formatted_data += f"\n{category.upper()}:\n"
-        category_places = df[df['Category'] == category]
+        # Get the current directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(current_dir, 'places.xlsx')
         
-        for _, row in category_places.iterrows():
-            formatted_data += f"- {row['Name']}: {row['Description']}\n"
-            formatted_data += f"  Location: {row['Address']}\n"
-            formatted_data += f"  Hours: {row['open time']} - {row['close time']}\n"
-            formatted_data += f"  Entry Fee: {row['Entry Fee']}\n"
-            if row['cultural tip']:
-                formatted_data += f"  Cultural Tip: {row['cultural tip']}\n"
-            formatted_data += "\n"
-    
-    return formatted_data
+        # Print file path for debugging
+        print(f"Attempting to load file from: {file_path}")
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            print(f"Error: File not found at {file_path}")
+            return None
+            
+        # Load the file
+        df = pd.read_excel(file_path)
+        print(f"Successfully loaded {len(df)} records from Excel file")
+        return df
+    except Exception as e:
+        print(f"Error loading Excel file: {str(e)}")
+        print(traceback.format_exc())  # Print full error traceback
+        return None
 
 @app.route('/api/generate-travel-plan', methods=['POST'])
 def generate_travel_plan():
     try:
-        # Get data from request
+        # Load data first
+        df = load_data()
+        if df is None:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to load data from Excel file'
+            }), 500
+
+        # Get request data
         data = request.get_json()
-        
         if not data or 'answers' not in data:
             return jsonify({
+                'success': False,
                 'error': 'Missing required field: answers'
             }), 400
-        
+
         answers = data['answers']
-        
-        # Load data from Excel file
-        places_df, _ = load_data()
-        if places_df is None:
-            return jsonify({
-                'error': 'Error loading data files'
-            }), 500
-        
-        # Format the available data
-        available_data = format_data_for_prompt(places_df)
-        
-        prompt = f"""Create a detailed travel plan using ONLY the places and activities provided in this list. 
-        Do not include any places or activities that are not in this list.
-        
-        {available_data}
-        
-        Please create the plan following this EXACT format:
-        
-        ## Destination Overview
-        Provide a 2-3 sentence overview focusing on the types of attractions available (historical, entertainment, nature spots, etc.).
-        
-        ## Daily Itinerary
-        Create a daily plan that:
-        - Respects the opening and closing times of each place
-        - Groups nearby locations together to minimize travel time
-        - Includes cultural tips for each place
-        - Mentions entry fees
-        
-        Day 1: [Title]
-        - Morning: [Place/Activity] (include opening time and cultural tip)
-        - Afternoon: [Place/Activity] (include cultural tip)
-        - Evening: [Place/Activity] (include closing time and cultural tip)
-        
-        [Continue for requested number of days...]
-        
-        ## Essential Tips
-        - List relevant cultural tips from the data
-        - Include dress code requirements
-        - Mention timing considerations
-        
-        ## Budget Breakdown
-        - List all entry fees from the selected places
-        - Total cost for attractions
-        
-        ## Practical Information
-        - Opening and closing times for each place
-        - Location details
-        - Cultural considerations
-        
-        Based on these preferences: {", ".join(answers)}
-        
-        Important: Only include places and activities that are explicitly listed in the provided data."""
+        print(f"Received answers: {answers}")  # Debug print
+
+        # Create simple prompt for testing
+        prompt = f"""Create a travel plan for {answers[0]} for {answers[1]}.
+        Include only places from the provided list."""
 
         # Generate response
         model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
-        
+
         return jsonify({
             'success': True,
             'travel_plan': response.text
         }), 200
 
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error in generate_travel_plan: {str(e)}")
+        print(traceback.format_exc())  # Print full error traceback
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
 if __name__ == '__main__':
-    print("Server starting at http://127.0.0.1:5000")
+    print("Starting server...")
+    print(f"Current directory: {os.getcwd()}")
     app.run(debug=True)

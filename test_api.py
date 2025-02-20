@@ -1,32 +1,42 @@
 import requests
 
-def get_travel_plan():
+def test_travel_plan():
     url = 'http://127.0.0.1:5000/api/generate-travel-plan'
     
-    # Example preferences
-    preferences = {
+    payload = {
         'answers': [
-            'Historical sites and museums',
+            'Cairo',
             '3 days',
-            'Prefer morning visits',
-            'Interested in cultural experiences'
+            'Historical sites'
         ]
     }
     
+    print("Sending request to:", url)
+    print("With payload:", payload)
+    
     try:
-        response = requests.post(url, json=preferences)
-        response.raise_for_status()
+        response = requests.post(url, json=payload)
+        print(f"Response status code: {response.status_code}")
         
-        data = response.json()
-        
-        if data['success']:
-            print("\nTravel Plan Generated Successfully!")
-            print("\n" + data['travel_plan'])
-        else:
-            print("Error:", data.get('error', 'Unknown error occurred'))
+        try:
+            data = response.json()
+            print("\nResponse data:", data)
             
-    except requests.exceptions.RequestException as e:
-        print("Error making request:", e)
+            if response.status_code == 200 and data.get('success'):
+                print("\nTravel Plan:")
+                print(data['travel_plan'])
+            else:
+                print("\nError in response:")
+                print(f"Status code: {response.status_code}")
+                print(f"Error message: {data.get('error', 'No error message provided')}")
+        except ValueError as e:
+            print("Error parsing JSON response:", e)
+            print("Raw response:", response.text)
+            
+    except requests.exceptions.ConnectionError:
+        print("Error: Could not connect to the server. Make sure the Flask app is running.")
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
 
 if __name__ == "__main__":
-    get_travel_plan()
+    test_travel_plan()
