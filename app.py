@@ -22,6 +22,48 @@ genai.configure(api_key=api_key)
 
 def load_data():
     try:
+        # Get the absolute path of the current directory
+        current_dir = os.getcwd()
+        
+        # Define file paths
+        places_path = os.path.join(current_dir, 'places.xlsx')
+        activities_path = os.path.join(current_dir, 'activities.xlsx')
+        
+        print(f"Current directory: {current_dir}")
+        print(f"Attempting to load files from:")
+        print(f"Places: {places_path}")
+        print(f"Activities: {activities_path}")
+
+        # Check if files exist
+        if not os.path.exists(places_path):
+            print(f"Error: Places file not found at {places_path}")
+            return None, None
+        if not os.path.exists(activities_path):
+            print(f"Error: Activities file not found at {activities_path}")
+            return None, None
+            
+        # Load the files
+        try:
+            places_df = pd.read_excel(places_path)
+            print(f"Successfully loaded places file with {len(places_df)} records")
+        except Exception as e:
+            print(f"Error loading places file: {str(e)}")
+            return None, None
+
+        try:
+            activities_df = pd.read_excel(activities_path)
+            print(f"Successfully loaded activities file with {len(activities_df)} records")
+        except Exception as e:
+            print(f"Error loading activities file: {str(e)}")
+            return None, None
+        
+        return places_df, activities_df
+
+    except Exception as e:
+        print(f"General error: {str(e)}")
+        print(traceback.format_exc())
+        return None, None
+    try:
         # Get the current directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(current_dir, 'places.xlsx')
